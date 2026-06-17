@@ -1,0 +1,50 @@
+{
+  "name": "luminine-cli",
+  "version": "1.0.0",
+  "description": "A powerful coding CLI like Claude Code",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "luminine": "dist/index.js",
+    "l": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "cli",
+    "coding",
+    "ai",
+    "assistant"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.18.0",
+    "boxen": "^7.1.1",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "figlet": "^1.7.0",
+    "glob": "^11.0.0",
+    "gradient-string": "^2.0.2",
+    "inquirer": "^9.3.2",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "ora": "^8.0.1",
+    "shelljs": "^0.8.5"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.5.8",
+    "@types/gradient-string": "^1.1.6",
+    "@types/inquirer": "^9.0.7",
+    "@types/marked-terminal": "^6.1.1",
+    "@types/node": "^20.14.2",
+    "@types/shelljs": "^0.8.15",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
