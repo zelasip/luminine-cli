@@ -22,6 +22,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.18.0",
     "boxen": "^7.1.1",
@@ -30,12 +31,15 @@
     "dotenv": "^16.4.5",
     "figlet": "^1.7.0",
     "glob": "^11.0.0",
+    "google-it": "^1.6.4",
     "gradient-string": "^2.0.2",
     "inquirer": "^9.3.2",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
+    "openai": "^6.43.0",
     "ora": "^8.0.1",
-    "shelljs": "^0.8.5"
+    "shelljs": "^0.8.5",
+    "string-similarity": "^4.0.4"
   },
   "devDependencies": {
     "@types/figlet": "^1.5.8",
@@ -44,6 +48,7 @@
     "@types/marked-terminal": "^6.1.1",
     "@types/node": "^20.14.2",
     "@types/shelljs": "^0.8.15",
+    "@types/string-similarity": "^4.0.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   }

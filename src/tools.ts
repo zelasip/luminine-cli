@@ -2,6 +2,8 @@ import { glob } from 'glob';
 import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
+// @ts-ignore
+import googleIt from 'google-it';
 
 export async function listFiles(pattern: string = '**/*') {
   try {
@@ -11,9 +13,7 @@ export async function listFiles(pattern: string = '**/*') {
       if (stats.isDirectory()) {
         finalPattern = path.join(pattern, '**/*');
       }
-    } catch (e) {
-      // If stat fails, it's probably already a glob pattern or non-existent file
-    }
+    } catch (e) {}
     const files = await glob(finalPattern, { ignore: ['node_modules/**', 'dist/**', '.git/**'], nodir: true });
     return files;
   } catch (error) {
@@ -61,6 +61,20 @@ export async function searchText(pattern: string, text: string) {
     return results;
   } catch (error) {
     console.error(chalk.red('Error searching text:'), error);
+    return [];
+  }
+}
+
+export async function searchWeb(query: string) {
+  try {
+    const results = await googleIt({ query, limit: 5 });
+    return results.map((r: any) => ({
+      title: r.title,
+      link: r.link,
+      snippet: r.snippet
+    }));
+  } catch (error) {
+    console.error(chalk.red('Error searching web:'), error);
     return [];
   }
 }
