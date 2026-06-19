@@ -12,10 +12,26 @@ Luminine is a powerful coding CLI designed to be your intelligent coding compani
 
 ## Installation
 
+### Linux / macOS
 ```bash
+curl -sL https://raw.githubusercontent.com/zelasip/luminine-cli/main/.github/install-scripts/install-linux.sh | bash
+```
+
+### Windows
+Download and run `install-windows.bat` from [Releases](https://github.com/zelasip/luminine-cli/releases).
+
+### Termux (Android)
+```bash
+curl -sL https://raw.githubusercontent.com/zelasip/luminine-cli/main/.github/install-scripts/install-termux.sh | bash
+```
+
+### Manual Install
+```bash
+git clone https://github.com/zelasip/luminine-cli.git
+cd luminine-cli
 npm install
 npm run build
-npm link # To use the 'luminine' command globally
+npm link
 ```
 
 ## Usage

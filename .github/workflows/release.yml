@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Package
+        run: tar -czf luminine-cli-linux.tar.gz dist/ package.json package-lock.json README.md LICENSE .github/install-scripts/install-linux.sh
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: luminine-cli-linux.tar.gz
+          body: |
+            ## Luminine CLI v${{ github.ref_name }}
+            
+            ### Quick Install (Linux)
+            ```bash
+            curl -sL https://raw.githubusercontent.com/zelasip/luminine-cli/main/.github/install-scripts/install-linux.sh | bash
+            ```
+            
+            ### Manual Install
+            1. Download `luminine-cli-linux.tar.gz`
+            2. Extract: `tar -xzf luminine-cli-linux.tar.gz`
+            3. Run `install-linux.sh`
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Package
+        run: Compress-Archive -Path dist,package.json,package-lock.json,README.md,LICENSE,.github/install-scripts/install-windows.bat -DestinationPath luminine-cli-windows.zip
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: luminine-cli-windows.zip
+          body: |
+            ## Luminine CLI v${{ github.ref_name }}
+            
+            ### Quick Install (Windows)
+            Download `install-windows.bat` and run it.
+            
+            ### Manual Install
+            1. Download `luminine-cli-windows.zip`
+            2. Extract
+            3. Run `install-windows.bat`
+
+  build-termux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package
+        run: tar -czf luminine-cli-termux.tar.gz dist/ package.json package-lock.json README.md LICENSE .github/install-scripts/install-termux.sh
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: luminine-cli-termux.tar.gz
+          body: |
+            ## Luminine CLI v${{ github.ref_name }}
+            
+            ### Termux Install
+            ```bash
+            curl -sL https://raw.githubusercontent.com/zelasip/luminine-cli/main/.github/install-scripts/install-termux.sh | bash
+            ```
+            
+            ### Manual Install
+            1. Download `luminine-cli-termux.tar.gz`
+            2. Extract: `tar -xzf luminine-cli-termux.tar.gz`
+            3. Run `bash install-termux.sh`

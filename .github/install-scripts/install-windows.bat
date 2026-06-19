@@ -1,14 +1,15 @@
 @echo off
 chcp 65001 >nul 2>&1
-title Luminine CLI - One-Click Installer
+title Luminine CLI - Windows Installer
 echo ============================================
-echo   Luminine CLI - Automatic Setup
+echo   Luminine CLI - Windows Installer
 echo ============================================
 echo.
 
-set "PROJECT_DIR=%~dp0"
+set "REPO=https://github.com/zelasip/luminine-cli.git"
+set "DIR=%USERPROFILE%\.luminine-cli"
 
-echo [1/3] Checking Node.js...
+echo [1/4] Checking Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [!] Node.js not found. Installing...
@@ -23,15 +24,25 @@ if %errorlevel% neq 0 (
     echo [OK] Node.js already installed.
 )
 
-echo [2/3] Installing dependencies...
-cd "%PROJECT_DIR%"
-npm install 2>nul
+echo [2/4] Cloning repository...
+if exist "%DIR%" (
+    cd "%DIR%"
+    git pull
+) else (
+    git clone "%REPO%" "%DIR%"
+    cd "%DIR%"
+)
 
-echo [3/3] Building...
-npm run build 2>nul
+echo [3/4] Installing dependencies...
+call npm install
+
+echo [4/4] Building...
+call npm run build
+call npm link
 
 echo.
 echo ============================================
-echo   Build complete! Run open_game.bat to start!
+echo   Installation complete!
+echo   Run: luminine
 echo ============================================
 pause
