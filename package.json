@@ -1,6 +1,6 @@
 {
   "name": "luminine-cli",
-  "version": "1.0.0",
+  "version": "1.9.4",
   "description": "A powerful coding CLI like Claude Code",
   "main": "dist/index.js",
   "type": "module",
