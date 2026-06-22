@@ -2,18 +2,44 @@ import { glob } from 'glob';
 import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
+// @ts-ignore
+import googleIt from 'google-it';
+
+async function confirmPathAccess(filePath: string): Promise<boolean> {
+  const absolutePath = path.resolve(filePath);
+  const root = process.cwd();
+
+  if (absolutePath.startsWith(root)) {
+    return true;
+  }
+
+  console.log(chalk.yellow(`\n⚠️  Agent is trying to access: ${absolutePath}`));
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: 'Outside workspace directory detected. Allow access?',
+    choices: [
+      { name: 'Allow Once', value: 'allow' },
+      { name: 'Deny & Explain', value: 'deny' }
+    ]
+  }]);
+
+  return action === 'allow';
+}
 
 export async function listFiles(pattern: string = '**/*') {
   try {
     let finalPattern = pattern;
+    // Basic check for pattern
+    if (!await confirmPathAccess(pattern)) return [];
+
     try {
       const stats = await fs.stat(pattern);
       if (stats.isDirectory()) {
         finalPattern = path.join(pattern, '**/*');
       }
-    } catch (e) {
-      // If stat fails, it's probably already a glob pattern or non-existent file
-    }
+    } catch (e) {}
     const files = await glob(finalPattern, { ignore: ['node_modules/**', 'dist/**', '.git/**'], nodir: true });
     return files;
   } catch (error) {
@@ -24,6 +50,7 @@ export async function listFiles(pattern: string = '**/*') {
 
 export async function readFileContent(filePath: string) {
   try {
+    if (!await confirmPathAccess(filePath)) return 'Access denied by user.';
     const content = await fs.readFile(filePath, 'utf-8');
     return content;
   } catch (error) {
@@ -34,6 +61,7 @@ export async function readFileContent(filePath: string) {
 
 export async function writeFileContent(filePath: string, content: string) {
   try {
+    if (!await confirmPathAccess(filePath)) return false;
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, 'utf-8');
     return true;
@@ -42,6 +70,7 @@ export async function writeFileContent(filePath: string, content: string) {
     return false;
   }
 }
+// ... rest of tools.ts
 
 export async function searchText(pattern: string, text: string) {
   try {
@@ -61,6 +90,20 @@ export async function searchText(pattern: string, text: string) {
     return results;
   } catch (error) {
     console.error(chalk.red('Error searching text:'), error);
+    return [];
+  }
+}
+
+export async function searchWeb(query: string) {
+  try {
+    const results = await googleIt({ query, limit: 5 });
+    return results.map((r: any) => ({
+      title: r.title,
+      link: r.link,
+      snippet: r.snippet
+    }));
+  } catch (error) {
+    console.error(chalk.red('Error searching web:'), error);
     return [];
   }
 }
