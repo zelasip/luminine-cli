@@ -51,6 +51,10 @@ program
     }
   });
 
+const setTerminalTitle = (title: string) => {
+    process.stdout.write(String.fromCharCode(27) + ']0;' + title + String.fromCharCode(7));
+};
+
 async function startInteractiveSession() {
   console.log(chalk.green('Interactive session started. Type "/help" for commands.'));
   
@@ -64,27 +68,23 @@ async function startInteractiveSession() {
 
   let currentStatus = 'Waiting4U';
   
-  const updatePrompt = () => {
-    const providerKey = process.env.LUMININE_PROVIDER || 'gemini';
-    const providerName = (SUPPORTED_MODELS as any)[providerKey]?.name || providerKey;
-    return chalk.gray(`(${providerName}) | ${currentStatus} `) + chalk.cyan('❯ ');
-  };
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: updatePrompt()
-  });
-
   const setStatus = (status: string) => {
     currentStatus = status;
-    rl.setPrompt(updatePrompt());
+    setTerminalTitle(`Luminine CLI | ${currentStatus}`);
   };
 
   const startAnimation = () => {
     const msg = statusMessages[Math.floor(Math.random() * statusMessages.length)];
     setStatus(msg + '...');
   };
+
+  setStatus('Waiting4U');
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: chalk.cyan('❯ ')
+  });
 
   rl.prompt();
 
@@ -224,7 +224,12 @@ async function handleSlashCommand(command: string) {
       break;
 
     case '/rewind':
-      const n = parseInt(args[0]) || 1;
+      const { n } = await inquirer.prompt([{
+        type: 'number',
+        name: 'n',
+        message: 'How many messages to rewind?',
+        default: 1
+      }]);
       const msg = rewindHistory(n);
       console.log(chalk.green(msg));
       break;
@@ -249,11 +254,19 @@ async function handleSlashCommand(command: string) {
       break;
 
     case '/resume':
-      const successLoad = await loadSession();
-      if (successLoad) {
-        console.log(chalk.green('Session resumed from disk.'));
-      } else {
-        console.log(chalk.red('No previous session found.'));
+      const { confirm } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'confirm',
+        message: 'Resume previous session?',
+        default: true
+      }]);
+      if (confirm) {
+        const successLoad = await loadSession();
+        if (successLoad) {
+          console.log(chalk.green('Session resumed.'));
+        } else {
+          console.log(chalk.red('No session found.'));
+        }
       }
       break;
 
