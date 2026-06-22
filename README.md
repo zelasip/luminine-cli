@@ -1,4 +1,4 @@
-# Luminine CLI 🌙
+# Luminine CLI 🌙 (v1.9.4)
 
 Luminine is a powerful coding CLI designed to be your intelligent coding companion, inspired by Claude Code. It features a sleek interface with a purple moon aesthetic.
 
