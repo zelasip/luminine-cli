@@ -1,37 +1,72 @@
-# Luminine CLI 🌙 (v1.9.4)
+# Luminine CLI 🌙 (v2.1.0)
 
-Luminine is a powerful coding CLI designed to be your intelligent coding companion, inspired by Claude Code. It features a sleek interface with a purple moon aesthetic.
+A powerful AI coding assistant CLI with streaming support, built for Termux and desktop.
 
 ## Features
 
-- **Interactive Shell**: A rich, interactive environment for coding tasks.
-- **File System Tools**: List files, read content, and more.
-- **Text Search**: Search for specific strings across your project files.
-- **Goal Planning**: Generate structured plans for your development goals.
-- **Shell Integration**: Execute system commands directly from the CLI.
+- **Streaming Responses** — Real-time token-by-token output
+- **Multi-Tool Execution** — Runs multiple tool calls in sequence automatically
+- **Shell Confirmation** — Interactive approval before executing commands
+- **Command History** — Persistent history with ↑/↓ navigation
+- **Image Generation** — Free AI image generation via Pollinations.ai
+- **File Operations** — Create, read, write, list files
+- **Web Search** — Search the web from the CLI
+- **Multi-Provider** — Gemini, OpenRouter, Anthropic, OpenAI, Custom, Luminine AI
 
 ## Installation
 
 ```bash
-npm install
-npm run build
-npm link # To use the 'luminine' command globally
+npm install -g luminine-cli
 ```
 
 ## Usage
 
-Start the interactive session:
 ```bash
 luminine
 ```
 
-Or run commands directly:
-```bash
-luminine ls src
-luminine search src "function"
-luminine plan "Refactor the authentication module"
+### Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help |
+| `/new` | New session (clear history) |
+| `/resume` | Load previous session |
+| `/compress` | Summarize history |
+| `/remember <fact>` | Save a fact |
+| `/models` | Switch provider/model |
+| `/config` | Configure API keys |
+| `/ls` | List files |
+| `/cat` | Read file |
+| `/run` | Run shell command |
+| `/exit` | Quit |
+
+### Keyboard Shortcuts
+
+- **↑/↓** — Navigate command history
+- **Ctrl+Y** — Toggle command restrictions
+
+## Configuration
+
+Create a `.env` file:
+
+```env
+LUMININE_PROVIDER=luminine
+LUMININE_MODEL=claude-opus-4-8
+GEMINI_API_KEY=your_key
+OPENROUTER_API_KEY=your_key
 ```
 
-## Logo
+## Providers
 
-The purple moon logo is displayed at every startup, symbolizing the light it brings to your coding journey.
+| Provider | Models |
+|----------|--------|
+| Luminine | claude-opus-4-8, gpt-5-5, gemini-3-flash, etc. |
+| Gemini | gemini-1.5-pro, gemini-2.5-flash |
+| OpenRouter | auto, llama-3.1-405b, claude-3.5-sonnet |
+| Anthropic | claude-3-5-sonnet, claude-3-opus |
+| OpenAI | gpt-4o, gpt-4-turbo |
+
+## License
+
+MIT
