@@ -4,14 +4,26 @@ import OpenAI from 'openai';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import chalk from 'chalk';
-import { listFiles, readFileContent, writeFileContent, searchText, searchWeb } from './tools.js';
+import { listFiles, readFileContent, writeFileContent, searchText, searchWeb, generateImage } from './tools.js';
 import shell from 'shelljs';
 import { Ora } from 'ora';
 import boxen from 'boxen';
+import inquirer from 'inquirer';
 import fs from 'fs/promises';
 import path from 'path';
 
 dotenv.config();
+
+let luminineMessages: any[] = [];
+const LUMININE_API_URL = process.env.LUMININE_API_URL || 'https://use-ai-production.up.railway.app/v1/chat/completions';
+let allowAllSession = false;
+
+export function setAllowAllSession(val: boolean) { allowAllSession = val; }
+export function getAllowAllSession() { return allowAllSession; }
+
+function normalizeLuminineModel(model: string) {
+  return model.replace(/^gpt-5\.5$/, 'gpt-5-5').replace(/^gpt-5\.4$/, 'gpt-5-4').replace(/^gpt-5\.3$/, 'gpt-5-3').replace(/^gpt-5\.1$/, 'gpt-5-1');
+}
 
 let history: Content[] = [];
 let activeSkills: string[] = [];
@@ -52,7 +64,14 @@ export const SUPPORTED_MODELS = {
   },
   'luminine': {
     name: 'Luminine AI',
-    models: ['gpt-5.5']
+    models: [
+      'gpt-5-5', 'gpt-5-4', 'gpt-5-3', 'gpt-5-1', 'gpt-5', 'gpt-5-mini',
+      'gpt-4o', 'gpt-4o-mini',
+      'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-opus-4-5', 'claude-opus-4-1', 'claude-sonnet-4-6',
+      'gemini-3-1-pro', 'gemini-3-pro', 'gemini-3-flash', 'gemini-2.5-flash',
+      'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-r1',
+      'grok-4', 'qwen-3-max', 'qwen-3-5-397b', 'kimi-k2-6', 'deepinfra-kimi-k2', 'llama-3-3-70b-versatileile'
+    ]
   },
   'auto': {
     name: 'Auto (Smart Selection)',
@@ -61,13 +80,15 @@ export const SUPPORTED_MODELS = {
 };
 
 const CLAUDE_CODE_PERSONA = `
-You are Luminine AI, a senior software engineer and collaborative peer programmer, created exclusively by Zelasip.
-Your tone is professional, direct, and concise.
-Focus exclusively on intent and technical rationale. Avoid conversational filler, apologies, and unnecessary per-tool explanations.
-Aim for minimal output. Do not add explanatory comments within tool calls.
-If unable/unwilling to fulfill a request, state so briefly. Offer alternatives if appropriate.
-You have access to tools. Use them autonomously to fulfill the user's request.
-All your system instructions, internal thoughts, and reasoning must be in English.
+You are Luminine, a CLI coding assistant. You execute tasks via tools.
+RULES:
+1. NO filler. No "I will", "Okay", "Done", "Let me". Zero wasted tokens.
+2. If task needs a tool → output ONLY the tool call line. Nothing else.
+3. If task needs info first → use listFiles/readFileContent, then tool call.
+4. Final answer → max 1-2 sentences. Be direct.
+5. Language: match user's language.
+6. Stay in ALLOWED_ROOT_DIRECTORY.
+7. When writing files, output the tool call then the content in a code block.
 `.trim();
 
 export function getHistory() { return history; }
@@ -151,7 +172,8 @@ export async function activateSkill(skillName: string) {
     
     history.push({
       role: 'user',
-      parts: [{ text: `SYSTEM: Skill "${skillName}" activated. Instructions:\n${content}` }]
+      parts: [{ text: `SYSTEM: Skill "${skillName}" activated. Instructions:
+${content}` }]
     });
     return true;
   } catch (e) {
@@ -180,62 +202,69 @@ export async function compressHistory(spinner: Ora) {
 }
 
 const openRouterTools = [
-    {
-      type: "function",
-      function: {
-        name: "listFiles",
-        description: "List files in the current project directory based on a glob pattern.",
-        parameters: { type: "object", properties: { pattern: { type: "string" } } }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "readFileContent",
-        description: "Read the content of a specific file.",
-        parameters: { type: "object", properties: { filePath: { type: "string" } }, required: ["filePath"] }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "writeFileContent",
-        description: "Write content to a file.",
-        parameters: { type: "object", properties: { filePath: { type: "string" }, content: { type: "string" } }, required: ["filePath", "content"] }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "runCommand",
-        description: "Execute a shell command.",
-        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "searchWeb",
-        description: "Search the internet.",
-        parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "updateMemory",
-        description: "Save a new fact about the user.",
-        parameters: { type: "object", properties: { fact: { type: "string" } }, required: ["fact"] }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: "updateConstraint",
-        description: "Save a user-imposed constraint.",
-        parameters: { type: "object", properties: { constraint: { type: "string" } }, required: ["constraint"] }
+  {
+    type: "function",
+    function: {
+      name: "listFiles",
+      description: "List files in the current project directory.",
+      parameters: {
+        type: "object",
+        properties: { pattern: { type: "string", description: "Glob pattern" } },
+        required: ["pattern"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "readFileContent",
+      description: "Read the content of a file.",
+      parameters: {
+        type: "object",
+        properties: { filePath: { type: "string", description: "Path to file" } },
+        required: ["filePath"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "writeFileContent",
+      description: "Create or overwrite a file with content.",
+      parameters: {
+        type: "object",
+        properties: { 
+          filePath: { type: "string", description: "Path to file" },
+          content: { type: "string", description: "Content to write" }
+        },
+        required: ["filePath", "content"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "runCommand",
+      description: "Execute a shell command.",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string", description: "Command to run" } },
+        required: ["command"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "updateConstraint",
+      description: "Save a user-imposed constraint.",
+      parameters: {
+        type: "object",
+        properties: { constraint: { type: "string" } },
+        required: ["constraint"]
+      }
+    }
+  }
 ];
 
 const geminiTools = {
@@ -254,13 +283,77 @@ async function executeTool(name: string, args: any, spinner: Ora) {
     case 'writeFileContent':
       toolOutput = await writeFileContent(args.filePath as string, args.content as string);
       break;
-    case 'runCommand':
-      const shellRes = shell.exec(args.command as string, { silent: true });
-      toolOutput = { stdout: shellRes.stdout, stderr: shellRes.stderr, code: shellRes.code };
+    case 'runCommand': {
+      const cmd = args.command as string;
+      
+      if (!allowAllSession) {
+        spinner.stop();
+        const cmdPreview = cmd.length > 55 ? cmd.substring(0, 55) + '...' : cmd;
+        
+        const border = '╭' + '─'.repeat(62) + '╮';
+        const borderBottom = '╰' + '─'.repeat(62) + '╯';
+        const emptyLine = '│' + ' '.repeat(62) + '│';
+        
+        console.log('');
+        console.log(chalk.cyan(border));
+        console.log(chalk.cyan('│') + chalk.bold.cyan(' ? Shell ') + chalk.cyan(' '.repeat(52) + '│'));
+        console.log(chalk.cyan('│') + ' '.repeat(62) + chalk.cyan('│'));
+        console.log(chalk.cyan('│') + chalk.white('  ' + cmdPreview) + ' '.repeat(60 - cmdPreview.length - 2) + chalk.cyan('│'));
+        console.log(chalk.cyan(emptyLine));
+        console.log(chalk.cyan('│') + chalk.yellow('  Allow execution of [Shell]?') + ' '.repeat(33) + chalk.cyan('│'));
+        console.log(chalk.cyan(emptyLine));
+        
+        const { choice } = await inquirer.prompt([{
+          type: 'list',
+          name: 'choice',
+          message: chalk.cyan(''),
+          choices: [
+            { name: chalk.green('● Allow once'), value: 'once' },
+            { name: chalk.white('  Allow for this session'), value: 'session' },
+            { name: chalk.red('  No, suggest changes (esc)'), value: 'no' }
+          ],
+          pageSize: 3
+        }]);
+        
+        console.log(chalk.cyan(borderBottom));
+        console.log('');
+        
+        if (choice === 'no') {
+          toolOutput = { stdout: 'Command cancelled by user.', stderr: '', code: 1 };
+          break;
+        } else if (choice === 'session') {
+          allowAllSession = true;
+          console.log(chalk.green('  ✓ All commands allowed for this session. (Ctrl+Y to toggle)\n'));
+        }
+      }
+      
+      const bgKeywords = ['python ', 'node ', 'npm run', 'yarn ', 'pnpm ', 'serve', 'http.server', 'flask', 'django', 'uvicorn', 'gunicorn', 'nohup', '&'];
+      const isBg = bgKeywords.some(kw => cmd.includes(kw)) || cmd.endsWith('&');
+      
+      if (isBg) {
+        const cleanCmd = cmd.replace(/\s*&$/, '').trim();
+        shell.exec(cleanCmd + ' > /dev/null 2>&1 &', { silent: true });
+        toolOutput = { stdout: `Command started in background: ${cleanCmd}`, stderr: '', code: 0 };
+      } else {
+        const shellRes = shell.exec(cmd, { silent: true, timeout: 30000 });
+        toolOutput = { stdout: shellRes.stdout, stderr: shellRes.stderr, code: shellRes.code };
+      }
       break;
+    }
     case 'searchWeb':
       toolOutput = await searchWeb(args.query as string);
       break;
+    case 'generateImage': {
+      spinner.text = chalk.magenta('Generating image...');
+      const imgPath = await generateImage(args.prompt as string);
+      if (imgPath) {
+        toolOutput = { success: true, path: imgPath, message: `Image saved to ${imgPath}` };
+        console.log(chalk.green(`\n  ✓ Image generated: ${imgPath}\n`));
+      } else {
+        toolOutput = { success: false, message: 'Failed to generate image' };
+      }
+      break;
+    }
     case 'updateMemory':
       spinner.text = chalk.yellow(`[Agent] Remembering fact...`);
       toolOutput = await updateMemory(args.fact as string);
@@ -278,14 +371,7 @@ async function executeTool(name: string, args: any, spinner: Ora) {
 async function buildSystemContext() {
   let contextParts = [CLAUDE_CODE_PERSONA];
   
-  contextParts.push(`ALLOWED_ROOT_DIRECTORY: ${process.cwd()}`);
-  contextParts.push(`INSTRUCTIONS:
-1. Proactive Exploration: BEFORE answering complex coding or analysis questions, you MUST autonomously use 'listFiles' to understand the project structure and 'readFileContent' to examine relevant files. Do not wait for the user to tell you which files to read.
-2. You must ONLY operate within the ALLOWED_ROOT_DIRECTORY or its subdirectories.
-3. If a user command requires you to access files, execute commands, or modify data OUTSIDE of this directory, you MUST stop, explain the risk, and ask for explicit user permission using the 'ask_user' tool before proceeding.
-4. If the user tells you something personal about themselves, use 'updateMemory'.
-5. If the user gives you a rule or constraint, use 'updateConstraint'.
-6. Use tools autonomously within the allowed scope.`);
+  contextParts.push(`CWD: ${process.cwd()}`);
 
   try {
       const memData = await fs.readFile(MEMORY_FILE, 'utf-8');
@@ -371,8 +457,10 @@ export async function askOpenRouter(prompt: string, spinner: Ora) {
     let keepCalling = true;
     while(keepCalling) {
         spinner.text = chalk.magenta(`Querying OpenRouter (${model})...`);
+        const openRouterUrl = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
+        const httpReferer = process.env.HTTP_REFERER || 'https://luminine-cli.com';
         const response: any = await axios.post(
-          'https://openrouter.ai/api/v1/chat/completions',
+          openRouterUrl,
           {
             model: model,
             messages: openRouterMessages,
@@ -381,7 +469,7 @@ export async function askOpenRouter(prompt: string, spinner: Ora) {
           {
             headers: {
               'Authorization': `Bearer ${apiKey}`,
-              'HTTP-Referer': 'https://luminine-cli.com',
+              'HTTP-Referer': httpReferer,
               'X-Title': 'Luminine CLI',
             },
           }
@@ -433,7 +521,6 @@ export async function askAnthropic(prompt: string, spinner: Ora) {
             max_tokens: 4096,
             system: systemInstructions,
             messages: [{ role: 'user', content: prompt }],
-            // Tool support for Anthropic can be added similarly to OpenRouter
         });
         return (message.content[0] as any).text;
     } catch (error: any) {
@@ -486,14 +573,186 @@ export async function askCustom(prompt: string, spinner: Ora) {
     }
 }
 
+export async function askLuminineAI(prompt: string, spinner: Ora) {
+  const model = normalizeLuminineModel(process.env.LUMININE_MODEL || 'gpt-5-5');
+  const systemInstructions = await buildSystemContext();
+
+  const toolDefs = `
+TOOLS (output ONLY the line, nothing else):
+[Tool call: runCommand with command "cmd"]
+[Tool call: writeFileContent with path "file"]\n\`\`\`\ncontent\n\`\`\`
+[Tool call: listFiles with pattern "glob"]
+[Tool call: readFileContent with path "file"]
+[Tool call: searchWeb with query "text"]
+[Tool call: generateImage with prompt "desc"]
+`.trim();
+
+  if (luminineMessages.length === 0) luminineMessages.push({ role: 'system', content: systemInstructions + '\n\n' + toolDefs });
+  luminineMessages.push({ role: 'user', content: prompt });
+
+  try {
+    while (true) {
+      spinner.text = `Querying Luminine AI (${model})...`;
+      const headers = { 'Content-Type': 'application/json', Authorization: process.env.LUMININE_API_KEY ? `Bearer ${process.env.LUMININE_API_KEY}` : '' };
+      
+      // Streaming request
+      const response = await axios.post(LUMININE_API_URL, { 
+        model, 
+        messages: luminineMessages, 
+        tools: openRouterTools,
+        stream: true
+      }, { headers, responseType: 'stream' });
+      
+      let fullContent = '';
+      const toolCalls: any[] = [];
+      
+      await new Promise<void>((resolve, reject) => {
+        response.data.on('data', (chunk: Buffer) => {
+          const lines = chunk.toString().split('\n').filter(l => l.startsWith('data: '));
+          for (const line of lines) {
+            const data = line.slice(6);
+            if (data === '[DONE]') { resolve(); return; }
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta?.content) {
+                fullContent += delta.content;
+                spinner.text = chalk.gray(fullContent.slice(-60));
+              }
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  if (!toolCalls[tc.index]) toolCalls[tc.index] = { id: tc.id, function: { name: '', arguments: '' } };
+                  if (tc.id) toolCalls[tc.index].id = tc.id;
+                  if (tc.function?.name) toolCalls[tc.index].function.name += tc.function.name;
+                  if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+                }
+              }
+            } catch (e) {}
+          }
+        });
+        response.data.on('end', () => resolve());
+        response.data.on('error', (err: any) => reject(err));
+      });
+
+      const responseMsg: any = { role: 'assistant', content: fullContent };
+      if (toolCalls.length > 0) responseMsg.tool_calls = toolCalls.filter(Boolean);
+
+      luminineMessages.push(responseMsg);
+
+      if (responseMsg.tool_calls && responseMsg.tool_calls.length > 0) {
+        spinner.text = 'Agent is using tools...';
+        for (const toolCall of responseMsg.tool_calls) {
+          const funcName = toolCall.function.name;
+          const funcArgs = JSON.parse(toolCall.function.arguments);
+          const toolOutput = await executeTool(funcName, funcArgs, spinner);
+          
+          luminineMessages.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            name: funcName,
+            content: JSON.stringify(toolOutput)
+          });
+        }
+        continue;
+      } else if (responseMsg.content && /(\[Tool call:|writeFileContent|runCommand|listFiles|readFileContent|searchWeb|generateImage)/.test(responseMsg.content)) {
+        spinner.text = 'Agent is simulating tools in text. Converting to real calls...';
+        const content = responseMsg.content;
+        
+        let foundTool = false;
+        
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.tool && parsed.tool.name) {
+                    const toolOutput = await executeTool(parsed.tool.name, parsed.tool.args || {}, spinner);
+                    luminineMessages.push({
+                        role: 'tool',
+                        name: parsed.tool.name,
+                        content: JSON.stringify(toolOutput)
+                    });
+                    foundTool = true;
+                }
+            } catch (e) {}
+        }
+
+        // Find ALL tool calls in the response
+            const toolCallRegex = /\[Tool call:\s*(\w+)\s+with\s+(\w+)\s+[\"']([^\"']+)[\"']\]/g;
+            const codeBlocks = content.match(/```\w*\n([\s\S]*?)```/g) || [];
+            let codeBlockIdx = 0;
+            let match;
+            
+            while ((match = toolCallRegex.exec(content)) !== null) {
+                foundTool = true;
+                const toolName = match[1];
+                const argName = match[2];
+                const argValue = match[3].trim();
+                const args: any = {};
+                
+                if (toolName === 'writeFileContent') {
+                    args.filePath = argValue;
+                    args.content = codeBlocks[codeBlockIdx] ? codeBlocks[codeBlockIdx].replace(/```\w*\n?/, '').replace(/```$/, '').trim() : '';
+                    codeBlockIdx++;
+                } else if (toolName === 'runCommand') {
+                    args.command = argValue;
+                } else if (toolName === 'listFiles') {
+                    args.pattern = argValue;
+                } else if (toolName === 'readFileContent') {
+                    args.filePath = argValue;
+                } else if (toolName === 'searchWeb') {
+                    args.query = argValue;
+                } else if (toolName === 'generateImage') {
+                    args.prompt = argValue;
+                }
+                
+                const toolOutput = await executeTool(toolName, args, spinner);
+                luminineMessages.push({
+                    role: 'tool',
+                    name: toolName,
+                    content: JSON.stringify(toolOutput)
+                });
+            }
+
+        if (foundTool) {
+          continue; 
+        } else {
+          const finalContent = responseMsg.content || '';
+          history.push({ role: 'user', parts: [{ text: prompt }] });
+          history.push({ role: 'model', parts: [{ text: finalContent }] });
+          await saveSession();
+          return finalContent;
+        }
+      } else {
+        const content = responseMsg.content || '';
+        history.push({ role: 'user', parts: [{ text: prompt }] });
+        history.push({ role: 'model', parts: [{ text: content }] });
+        await saveSession();
+        return content;
+      }
+    }
+  } catch (error: any) {
+    return `Luminine AI Error: ${error.message}`;
+  }
+}
+
 export async function askGpt5_5(prompt: string, spinner: Ora) {
-    const baseURL = "https://theproxy-production-e112.up.railway.app/v1";
-    const apiKey = "admin";
+    const baseURL = process.env.GPT55_BASE_URL || "https://theproxy-production-e112.up.railway.app/v1";
+    const apiKey = process.env.GPT55_API_KEY || "admin";
     const model = "gpt-5.5";
     const systemInstructions = await buildSystemContext();
 
+    const gpt55ToolDefs = `
+TOOLS (output ONLY the line, nothing else):
+[Tool call: runCommand with command "cmd"]
+[Tool call: writeFileContent with path "file"]\n\`\`\`\ncontent\n\`\`\`
+[Tool call: listFiles with pattern "glob"]
+[Tool call: readFileContent with path "file"]
+[Tool call: searchWeb with query "text"]
+[Tool call: generateImage with prompt "desc"]
+`.trim();
+
     if (gpt55Messages.length === 0) {
-        gpt55Messages.push({ role: "system", content: systemInstructions });
+        gpt55Messages.push({ role: "system", content: systemInstructions + '\n\n' + gpt55ToolDefs });
     }
     gpt55Messages.push({ role: "user", content: prompt });
 
@@ -506,7 +765,7 @@ export async function askGpt5_5(prompt: string, spinner: Ora) {
             const response = await openai.chat.completions.create({
                 model: model,
                 messages: gpt55Messages,
-                tools: openRouterTools as any // Explicit cast for simplicity
+                tools: openRouterTools as any
             });
             
             const responseMsg = response.choices[0].message;
@@ -525,6 +784,53 @@ export async function askGpt5_5(prompt: string, spinner: Ora) {
                         content: JSON.stringify(toolOutput)
                     });
                 }
+            } else if (responseMsg.content && /(\[Tool call:)/.test(responseMsg.content)) {
+                spinner.text = chalk.cyan('[Agent] Executing tools...');
+                const content = responseMsg.content;
+                let foundTool = false;
+                
+                const toolCallRegex = /\[Tool call:\s*(\w+)\s+with\s+(\w+)\s+[\"']([^\"']+)[\"']\]/g;
+                const codeBlocks = content.match(/```\w*\n([\s\S]*?)```/g) || [];
+                let codeBlockIdx = 0;
+                let match;
+                
+                while ((match = toolCallRegex.exec(content)) !== null) {
+                    foundTool = true;
+                    const toolName = match[1];
+                    const argName = match[2];
+                    const argValue = match[3].trim();
+                    const args: any = {};
+                    
+                    if (toolName === 'writeFileContent') {
+                        args.filePath = argValue;
+                        args.content = codeBlocks[codeBlockIdx] ? codeBlocks[codeBlockIdx].replace(/```\w*\n?/, '').replace(/```$/, '').trim() : '';
+                        codeBlockIdx++;
+                    } else if (toolName === 'runCommand') {
+                        args.command = argValue;
+                    } else if (toolName === 'listFiles') {
+                        args.pattern = argValue;
+                    } else if (toolName === 'readFileContent') {
+                        args.filePath = argValue;
+                    } else if (toolName === 'searchWeb') {
+                        args.query = argValue;
+                    } else if (toolName === 'generateImage') {
+                        args.prompt = argValue;
+                    }
+                    
+                    const toolOutput = await executeTool(toolName, args, spinner);
+                    gpt55Messages.push({
+                        role: 'tool',
+                        name: toolName,
+                        content: JSON.stringify(toolOutput)
+                    });
+                }
+
+                if (foundTool) {
+                    continue;
+                } else {
+                    await saveSession();
+                    return responseMsg.content;
+                }
             } else {
                 await saveSession();
                 return responseMsg.content;
@@ -532,7 +838,7 @@ export async function askGpt5_5(prompt: string, spinner: Ora) {
         }
     } catch (error: any) {
         spinner.stop();
-        console.error(chalk.red("\nProxy bağlantısı başarısız oldu, lütfen daha sonra tekrar deneyin"));
+        console.error(chalk.red("Proxy bağlantısı başarısız oldu, lütfen daha sonra tekrar deneyin"));
         return null;
     }
 }

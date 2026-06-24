@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "role": "user",
+    "parts": [
+      {
+        "text": "kanka napıyon"
+      }
+    ]
+  },
+  {
+    "role": "model",
+    "parts": [
+      {
+        "text": "İş üstündeyim, hazır bekliyorum. Ne yapmamı istersin?"
+      }
+    ]
+  }
+]

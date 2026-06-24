@@ -14,14 +14,39 @@ import gradient from 'gradient-string';
 import { showLogo } from './logo.js';
 import { listFiles, readFileContent, writeFileContent, searchText } from './tools.js';
 import { 
-  askGemini, askOpenRouter, askAnthropic, askOpenAI, askCustom, askGpt5_5,
+  askGemini, askOpenRouter, askAnthropic, askOpenAI, askCustom, askGpt5_5, askLuminineAI,
   resetHistory, rewindHistory, getAvailableSkills, activateSkill, 
-  saveSession, loadSession, compressHistory, updateMemory, SUPPORTED_MODELS 
+  saveSession, loadSession, compressHistory, updateMemory, SUPPORTED_MODELS,
+  setAllowAllSession, getAllowAllSession
 } from './llm.js';
 
 marked.setOptions({
   renderer: new TerminalRenderer() as any
 });
+
+const CMD_HISTORY_FILE = '.luminine_cmd_history.json';
+let cmdHistory: string[] = [];
+let cmdHistoryIndex = -1;
+
+async function loadCmdHistory() {
+  try {
+    const data = await fs.readFile(CMD_HISTORY_FILE, 'utf-8');
+    cmdHistory = JSON.parse(data);
+  } catch { cmdHistory = []; }
+}
+
+async function saveCmdHistory() {
+  await fs.writeFile(CMD_HISTORY_FILE, JSON.stringify(cmdHistory, null, 2));
+}
+
+function addToCmdHistory(cmd: string) {
+  if (cmd.trim() && cmdHistory[cmdHistory.length - 1] !== cmd) {
+    cmdHistory.push(cmd);
+    if (cmdHistory.length > 200) cmdHistory.shift();
+    saveCmdHistory();
+  }
+  cmdHistoryIndex = cmdHistory.length;
+}
 
 const program = new Command();
 
@@ -80,6 +105,8 @@ async function startInteractiveSession() {
 
   setStatus('Waiting4U');
 
+  await loadCmdHistory();
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -87,6 +114,42 @@ async function startInteractiveSession() {
   });
 
   rl.prompt();
+
+  process.stdin.on('keypress', (str, key) => {
+    if (!key) return;
+
+    if (key.ctrl && key.name === 'y') {
+      const current = getAllowAllSession();
+      setAllowAllSession(!current);
+      if (!current) {
+        console.log(chalk.green('\n✓ Session unrestricted. All commands will run without confirmation.'));
+      } else {
+        console.log(chalk.yellow('\n⚠ Session restricted. Commands will require confirmation.'));
+      }
+      rl.prompt();
+      return;
+    }
+
+    if (key.name === 'up') {
+      if (cmdHistory.length === 0) return;
+      if (cmdHistoryIndex > 0) cmdHistoryIndex--;
+      else cmdHistoryIndex = 0;
+      const cmd = cmdHistory[cmdHistoryIndex] || '';
+      process.stdout.write('\r\x1B[K');
+      process.stdout.write(chalk.cyan('❯ ') + cmd);
+    } else if (key.name === 'down') {
+      if (cmdHistoryIndex < cmdHistory.length - 1) {
+        cmdHistoryIndex++;
+        const cmd = cmdHistory[cmdHistoryIndex] || '';
+        process.stdout.write('\r\x1B[K');
+        process.stdout.write(chalk.cyan('❯ ') + cmd);
+      } else {
+        cmdHistoryIndex = cmdHistory.length;
+        process.stdout.write('\r\x1B[K');
+        process.stdout.write(chalk.cyan('❯ '));
+      }
+    }
+  });
 
   let isBusy = false;
 
@@ -121,6 +184,7 @@ async function startInteractiveSession() {
 
     const animInterval = setInterval(startAnimation, 1000);
     await handleCommand(trimmedInput);
+    addToCmdHistory(trimmedInput);
     clearInterval(animInterval);
     
     isBusy = false;
@@ -150,6 +214,9 @@ async function handleCommand(command: string) {
     if (provider === 'gpt-5.5' || model === 'gpt-5.5') {
       spinner.text = 'Querying Luminine AI (gpt-5.5)...';
       llmResponse = await askGpt5_5(command, spinner);
+    } else if (provider === 'luminine') {
+      spinner.text = 'Querying Luminine AI...';
+      llmResponse = await askLuminineAI(command, spinner);
     } else if (provider === 'openrouter') {
       spinner.text = 'Querying OpenRouter...';
       llmResponse = await askOpenRouter(command, spinner);

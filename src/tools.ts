@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
+import axios from 'axios';
 // @ts-ignore
 import googleIt from 'google-it';
 
@@ -105,5 +106,26 @@ export async function searchWeb(query: string) {
   } catch (error) {
     console.error(chalk.red('Error searching web:'), error);
     return [];
+  }
+}
+
+export async function generateImage(prompt: string): Promise<string | null> {
+  try {
+    const encodedPrompt = encodeURIComponent(prompt);
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
+    
+    const response = await axios.get(url, { 
+      responseType: 'arraybuffer',
+      timeout: 60000 
+    });
+    
+    const filename = `image_${Date.now()}.png`;
+    const filePath = path.join(process.cwd(), filename);
+    await fs.writeFile(filePath, Buffer.from(response.data));
+    
+    return filePath;
+  } catch (error) {
+    console.error(chalk.red('Error generating image:'), error);
+    return null;
   }
 }
